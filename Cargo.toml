@@ -1,0 +1,19 @@
+[package]
+name = "usbmount"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dialoguer = "0.10.1"
+udev = "^0.6.3"
+regex = "1.6.0"
+lazy_static = "1.4.0"
+clap = { version = "3.2.8", features = ["derive"] }
+byte-unit = "4.0.14"
+sys-mount = { version = "1.5.1", default-features = false, features = [] }
+whoami = "1.2.1"
+sudo = "0.6.0"
+ctrlc = { version = "3.0", features = ["termination"] }
+console = "0.15.0"
