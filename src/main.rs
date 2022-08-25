@@ -1,11 +1,16 @@
 use byte_unit::Byte;
 use dialoguer::{theme::ColorfulTheme, Select};
-use std::{collections::HashMap, fs, path::Path};
-use sys_mount::{unmount, Mount, MountFlags, SupportedFilesystems, UnmountFlags};
+use lazy_static::lazy_static;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
+use sys_mount::{unmount, FilesystemType, Mount, MountFlags, UnmountFlags};
 
-use usbmount::{get_available_partition_devices, PartitionDevice};
 use clap::{Parser, Subcommand};
 use console::Term;
+use usbmount::{get_available_partition_devices, PartitionDevice};
 
 #[derive(Parser)]
 #[clap(version = "1.0")]
@@ -22,11 +27,14 @@ struct ArgumentParser {
 enum Commands {
     #[clap(visible_alias = "m")]
     Mount {
-        #[clap(short, long, default_value_t = String::from("/var/run/media/"))]
+        #[clap(short = 'd', long, default_value_t = String::from("/var/run/media/"))]
         auto_mount_dir: String,
 
-        #[clap(short, long)]
+        #[clap(short = 'o', long)]
         mount_option: Option<String>,
+
+        #[clap(short = 't', long)]
+        fs_type: Option<String>,
 
         #[clap(action)]
         dev_path: Option<String>,
@@ -46,7 +54,13 @@ enum Commands {
 }
 
 static IDENTIFY_FILE: &str = ".create_by_usbmount";
-static MOUNT_WITH_DEFAULT_OPTION_FILESYSTEM: [&str; 3] = ["ntfs", "vfat", "exfat"];
+
+lazy_static! {
+    static ref MOUNT_WITH_DEFAULT_OPTION_FILESYSTEM: HashSet<&'static str> =
+        HashSet::from(["ntfs", "vfat", "exfat"]);
+    static ref MOUNT_FSTYPE_MAPPING: HashMap<&'static str, Vec<&'static str>> =
+        HashMap::from([("ntfs", Vec::from(["ntfs3", "ntfs-3g"]))]);
+}
 
 extern "system" {
     fn geteuid() -> u32;
@@ -174,7 +188,7 @@ fn main() {
 
     let argument_parser = ArgumentParser::parse();
     match argument_parser.command {
-        Commands::Mount{..} | Commands::Umount{..} => {
+        Commands::Mount { .. } | Commands::Umount { .. } => {
             if !argument_parser.skip_escalate && safe_geteuid() != 0 {
                 sudo::escalate_if_needed().expect("escalate error");
             }
@@ -191,6 +205,7 @@ fn main() {
         Commands::Mount {
             auto_mount_dir,
             mount_option,
+            fs_type,
             dev_path,
             mount_path,
         } => {
@@ -294,11 +309,20 @@ fn main() {
                     }
                 };
 
+                let fs_type = if let Some(fs_type) = fs_type {
+                    fs_type.split(",").collect::<Vec<&str>>()
+                } else {
+                    MOUNT_FSTYPE_MAPPING
+                        .get(device.partition_filesystem.as_str())
+                        .map(|x| x.to_owned())
+                        .unwrap_or_else(|| Vec::from([device.partition_filesystem.as_str()]))
+                };
+
                 // mount device
                 match Mount::new(
                     &device.dev_path,
                     &mount_path,
-                    &SupportedFilesystems::new().unwrap(),
+                    FilesystemType::from(fs_type.as_slice()),
                     MountFlags::empty(),
                     Some(&mount_option),
                 ) {
