@@ -84,6 +84,14 @@ impl PartitionDevice {
         return device_properties;
     }
 
+    fn check_is_usb_device(device: &Device) -> bool {
+        return if let Ok(parent) = device.parent_with_subsystem("usb") {
+            parent.is_some()
+        } else {
+            false
+        };
+    }
+
     fn from_device(device: Device) -> Option<Self> {
         let device_syspath = String::from(device.syspath().to_string_lossy());
         let device_properties = PartitionDevice::get_device_properties(&device);
@@ -92,12 +100,7 @@ impl PartitionDevice {
             return None; // no file system detected, return None
         }
 
-        return if device_properties
-            .get("ID_BUS")
-            .unwrap_or(&String::from(""))
-            .to_lowercase()
-            == "usb"
-        {
+        return if PartitionDevice::check_is_usb_device(&device) {
             // usb partition found
             Some(PartitionDevice {
                 dev_path: String::from(
@@ -154,13 +157,8 @@ impl PartitionDevice {
             let parent_device_syspath =
                 String::from(parent_device.unwrap().path().to_string_lossy());
             let parent_device = Device::from_syspath(Path::new(&parent_device_syspath)).unwrap();
-            let parent_device_properties = PartitionDevice::get_device_properties(&parent_device);
 
-            if parent_device_properties
-                .get("ID_BUS")
-                .unwrap_or(&String::from(""))
-                != "usb"
-            {
+            if !PartitionDevice::check_is_usb_device(&parent_device) {
                 return None; // dm device's parent not a usb device, return None
             }
 
@@ -185,7 +183,7 @@ impl PartitionDevice {
                     .parse::<u64>()
                     .unwrap()
                     * 512u64,
-                usb_model_name: parent_device_properties
+                usb_model_name: PartitionDevice::get_device_properties(&parent_device)
                     .get("ID_MODEL")
                     .map(|s| String::from(s)),
                 mounted_points: CACAHED_MOUNT_INFO.get_mount_points_by_id(&String::from(
