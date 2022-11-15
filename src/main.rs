@@ -183,6 +183,20 @@ fn select_umount_device(mut devices_map: HashMap<String, PartitionDevice>) -> Pa
     }
 }
 
+fn clean_auto_created_mount_point(mount_point: &String) {
+    let identify_file_path = Path::new(mount_point).join(IDENTIFY_FILE);
+    if identify_file_path.exists() {
+        fs::remove_file(&identify_file_path).expect(&format!(
+            "remove identify file `{}` error",
+            identify_file_path.to_string_lossy()
+        ));
+        fs::remove_dir(mount_point).expect(&format!(
+            "remove mount point directory `{}` error",
+            mount_point
+        ));
+    }
+}
+
 fn main() {
     ctrlc::set_handler(|| {}).unwrap(); // ignore ctrl-c, let the process exit after sudo exit
 
@@ -334,6 +348,7 @@ fn main() {
                             "failed to mount {} to {}: {}",
                             device.dev_path, mount_path, why
                         );
+                        clean_auto_created_mount_point(&mount_path);
                         std::process::exit(-1);
                     }
                 }
@@ -384,19 +399,10 @@ fn main() {
                             &mount_point,
                             result.err().unwrap()
                         );
+                        std::process::exit(-1);
                     } else {
+                        clean_auto_created_mount_point(&mount_point);
                         println!("{}", mount_point);
-                        let identify_file_path = Path::new(&mount_point).join(IDENTIFY_FILE);
-                        if identify_file_path.exists() {
-                            fs::remove_file(&identify_file_path).expect(&format!(
-                                "remove identify file `{}` error",
-                                identify_file_path.to_string_lossy()
-                            ));
-                            fs::remove_dir(&mount_point).expect(&format!(
-                                "remove mount point directory `{}` error",
-                                mount_point
-                            ));
-                        }
                     }
                 }
             }
